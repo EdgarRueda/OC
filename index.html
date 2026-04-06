@@ -148,7 +148,6 @@
 
     const calcularDuracion = (si, fi) => {
         let d = fi - si;
-        if (d < 0) d += 48;
         let min = d * 30;
         return `[${Math.floor(min/60).toString().padStart(2,'0')}:${(min%60).toString().padStart(2,'0')}]`;
     };
@@ -160,7 +159,7 @@
         return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}h`;
     };
 
-    const getBloqueDesdeFecha = (fecha) => {
+    const getBloqueDesdeFecha = (fecha, esFechaInicio, fechaReferencia) => {
         let h = fecha.getHours();
         let m = fecha.getMinutes();
         let bloqueMin = 0;
@@ -170,7 +169,15 @@
             h++;
             bloqueMin = 0;
         }
-        return (h * 2) + bloqueMin;
+        
+        let bloqueFinal = (h * 2) + bloqueMin;
+        
+        // Si la fecha es de un día distinto al de referencia (hoy), sumamos 48 bloques
+        if (fechaReferencia && fecha.getDate() !== fechaReferencia.getDate()) {
+            bloqueFinal += 48;
+        }
+        
+        return bloqueFinal;
     };
 
     window.importar = (tipo, input) => {
@@ -178,13 +185,20 @@
         reader.onload = (e) => {
             const data = XLSX.utils.sheet_to_json(XLSX.read(e.target.result, {type:'binary', cellDates:true}).Sheets[XLSX.read(e.target.result, {type:'binary', cellDates:true}).SheetNames[0]]);
             if (tipo === 'ocs') { 
+                const fechaRef = new Date(document.getElementById('fechaProg').value + "T00:00:00");
                 rawO = data;
                 asignaciones = rawO.map(oc => {
                     const di = new Date(oc['FECHA INICIO']), df = new Date(oc['FECHA FIN']);
+                    let si = getBloqueDesdeFecha(di, true, fechaRef);
+                    let fi = getBloqueDesdeFecha(df, false, fechaRef);
+                    
+                    // Corrección para OCs que cruzan la medianoche
+                    if (fi <= si) fi += 48; 
+
                     return { 
                         id: String(oc['OC'] || oc['Orden de Cambio']), 
-                        si: getBloqueDesdeFecha(di), 
-                        fi: getBloqueDesdeFecha(df), 
+                        si: si, 
+                        fi: fi, 
                         u: "SIN_ASIGNAR", 
                         clr: `hsl(${(parseInt(oc['OC'] || 1)*137)%360}, 65%, 45%)` 
                     };
@@ -236,9 +250,13 @@
         const hReal = bloque % 48;
         const info = hMap[leyendaTurno];
         if(!info) return false;
+        
+        // Regla específica para Hernan o Turno T2 (Noche)
         if(usuario.includes("Hernan Erazo") || leyendaTurno === "T2") {
             return (bloque >= 40 && bloque < 56);
         }
+        
+        // Manejo de turnos normales (incluyendo los que cruzan medianoche)
         return info.si < info.fi ? (hReal >= info.si && hReal < info.fi) : (hReal >= info.si || hReal < info.fi);
     };
 
@@ -362,11 +380,10 @@
 
             let bloquesOcupados = resumenData[u].reduce((acc, o) => {
                 let d = o.fi - o.si;
-                return acc + (d < 0 ? d + 48 : d);
+                return acc + d;
             }, 0);
             
             const ocsHtml = resumenData[u].map(o => {
-                // VALIDACIÓN: ¿La OC asignada coincide con su rango activo?
                 let valida = true;
                 for(let i = o.si; i < o.fi; i++) {
                     if(!esBloqueDisponible(i, pData.n, pData.t)) { valida = false; break; }
@@ -391,7 +408,6 @@
         });
     }
 
-    // Nueva función para abrir por ID desde el resumen
     window.abrirOCById = (id) => {
         const oc = asignaciones.find(a => a.id === id);
         if(oc) window.abrir(oc);
@@ -405,14 +421,13 @@
             personalList.forEach(p => {
                 let disponibleTodoElRango = true;
                 for(let i = oc.si; i < oc.fi; i++) {
-                    if(!esBloqueDisponible(i, p.n, p.t)) { disponibleTodoElRango = false; break; }
+                    if(i >= TOTAL_BLOQUES || !esBloqueDisponible(i, p.n, p.t)) { disponibleTodoElRango = false; break; }
                 }
                 if(!disponibleTodoElRango) return;
                 const tieneTraslape = asignaciones.some(a => a.u === p.n && !(oc.fi <= a.si || oc.si >= a.fi));
                 if(tieneTraslape) return;
                 let cargaActual = asignaciones.filter(a => a.u === p.n).reduce((sum, a) => {
-                    let d = a.fi - a.si;
-                    return sum + (d < 0 ? d + 48 : d);
+                    return sum + (a.fi - a.si);
                 }, 0);
                 if(cargaActual < menorCarga) { menorCarga = cargaActual; mejorCandidato = p.n; }
             });
@@ -430,16 +445,13 @@
         
         let opts = `<option value="SIN_ASIGNAR">SIN ASIGNAR</option>`;
         opts += personalList.map(p => {
-            // REGLA: Validar si este personal está disponible para esta OC específica
             let ok = true;
             for(let i=oc.si; i<oc.fi; i++) {
-                if(!esBloqueDisponible(i, p.n, p.t)) { ok = false; break; }
+                if(i >= TOTAL_BLOQUES || !esBloqueDisponible(i, p.n, p.t)) { ok = false; break; }
             }
             
-            // CÁLCULO DE CARGA ACTUAL:
             let cargaBloques = asignaciones.filter(a => a.u === p.n).reduce((sum, a) => {
-                let d = a.fi - a.si;
-                return sum + (d < 0 ? d + 48 : d);
+                return sum + (a.fi - a.si);
             }, 0);
             const cargaTexto = `[${calcularEsfuerzoTexto(cargaBloques)}]`;
 
