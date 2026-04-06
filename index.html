@@ -100,7 +100,7 @@
             <tr>
                 <th>Personal</th>
                 <th>Esfuerzo Total</th>
-                <th>Órdenes de Cambio y Horarios</th>
+                <th>Órdenes de Cambio y Horarios (Click para reasignar)</th>
             </tr>
         </thead>
         <tbody id="resumenBody"></tbody>
@@ -162,21 +162,13 @@
     const getBloqueDesdeFecha = (fecha, esFechaInicio, fechaReferencia) => {
         let h = fecha.getHours();
         let m = fecha.getMinutes();
-        let bloqueMin = 0;
-        if (m >= 15 && m < 45) {
-            bloqueMin = 1;
-        } else if (m >= 45) {
-            h++;
-            bloqueMin = 0;
-        }
+        let bloqueMin = (m >= 15 && m < 45) ? 1 : 0;
+        if (m >= 45) h++;
         
         let bloqueFinal = (h * 2) + bloqueMin;
-        
-        // Si la fecha es de un día distinto al de referencia (hoy), sumamos 48 bloques
         if (fechaReferencia && fecha.getDate() !== fechaReferencia.getDate()) {
             bloqueFinal += 48;
         }
-        
         return bloqueFinal;
     };
 
@@ -191,15 +183,10 @@
                     const di = new Date(oc['FECHA INICIO']), df = new Date(oc['FECHA FIN']);
                     let si = getBloqueDesdeFecha(di, true, fechaRef);
                     let fi = getBloqueDesdeFecha(df, false, fechaRef);
-                    
-                    // Corrección para OCs que cruzan la medianoche
                     if (fi <= si) fi += 48; 
-
                     return { 
                         id: String(oc['OC'] || oc['Orden de Cambio']), 
-                        si: si, 
-                        fi: fi, 
-                        u: "SIN_ASIGNAR", 
+                        si: si, fi: fi, u: "SIN_ASIGNAR", 
                         clr: `hsl(${(parseInt(oc['OC'] || 1)*137)%360}, 65%, 45%)` 
                     };
                 });
@@ -212,7 +199,12 @@
         reader.readAsBinaryString(input.files[0]);
     }
 
+    // VALIDACIÓN DE EXPORTACIÓN
     window.exportarAsignacion = () => {
+        if (asignaciones.length === 0) {
+            alert("No hay datos de asignación para exportar.");
+            return;
+        }
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(asignaciones));
         const downloadAnchorNode = document.createElement('a');
         downloadAnchorNode.setAttribute("href", dataStr);
@@ -222,11 +214,23 @@
         downloadAnchorNode.remove();
     };
 
+    // VALIDACIÓN DE IMPORTACIÓN: Refresca la matriz y el resumen automáticamente
     window.importarAsignacion = (input) => {
         const reader = new FileReader();
         reader.onload = (e) => {
-            asignaciones = JSON.parse(e.target.result);
-            generar();
+            try {
+                const importedData = JSON.parse(e.target.result);
+                if (Array.isArray(importedData)) {
+                    asignaciones = importedData;
+                    // Forzamos el regenerado de estructuras y el redibujado de la UI
+                    generar(); 
+                    alert("Asignaciones cargadas correctamente.");
+                } else {
+                    alert("El archivo JSON no tiene un formato válido.");
+                }
+            } catch (err) {
+                alert("Error al leer el archivo JSON.");
+            }
         };
         reader.readAsText(input.files[0]);
     };
@@ -250,13 +254,7 @@
         const hReal = bloque % 48;
         const info = hMap[leyendaTurno];
         if(!info) return false;
-        
-        // Regla específica para Hernan o Turno T2 (Noche)
-        if(usuario.includes("Hernan Erazo") || leyendaTurno === "T2") {
-            return (bloque >= 40 && bloque < 56);
-        }
-        
-        // Manejo de turnos normales (incluyendo los que cruzan medianoche)
+        if(usuario.includes("Hernan Erazo") || leyendaTurno === "T2") return (bloque >= 40 && bloque < 56);
         return info.si < info.fi ? (hReal >= info.si && hReal < info.fi) : (hReal >= info.si || hReal < info.fi);
     };
 
@@ -266,14 +264,12 @@
             const ley = tr.cells[0].innerText.trim().toUpperCase();
             const r = tr.cells[1].innerText.trim();
             if(ley === 'T2') {
-                hMap['T2'] = { si: 20*2, fi: 4*2, raw: "20:00 - 04:00" }; 
+                hMap['T2'] = { si: 40, fi: 8, raw: "20:00 - 04:00" }; 
             } else if(r.includes('-')) {
                 const [i, f] = r.split('-');
                 const [hi, mi] = i.split(':').map(Number);
                 const [hf, mf] = f.split(':').map(Number);
-                let bSi = (hi * 2) + (mi >= 30 ? 1 : 0);
-                let bFi = (hf * 2) + (mf >= 30 ? 1 : 0);
-                hMap[tr.cells[0].innerText.trim()] = { si: bSi, fi: bFi, raw: r };
+                hMap[tr.cells[0].innerText.trim()] = { si: (hi * 2) + (mi >= 30 ? 1 : 0), fi: (hf * 2) + (mf >= 30 ? 1 : 0), raw: r };
             }
         });
         
@@ -377,92 +373,53 @@
             const tr = document.createElement('tr');
             const pData = personalList.find(x => x.n === u);
             const rH = (pData && hMap[pData.t]) ? hMap[pData.t].raw : "No definido";
-
-            let bloquesOcupados = resumenData[u].reduce((acc, o) => {
-                let d = o.fi - o.si;
-                return acc + d;
-            }, 0);
+            let bloquesOcupados = resumenData[u].reduce((acc, o) => acc + (o.fi - o.si), 0);
             
             const ocsHtml = resumenData[u].map(o => {
                 let valida = true;
-                for(let i = o.si; i < o.fi; i++) {
-                    if(!esBloqueDisponible(i, pData.n, pData.t)) { valida = false; break; }
-                }
+                for(let i = o.si; i < o.fi; i++) if(!esBloqueDisponible(i, pData.n, pData.t)) { valida = false; break; }
                 const status = valida ? "" : ' <span class="tag-fuera-turno">(⚠️ Fuera de Turno)</span>';
-                
-                return `<span class="tag-oc" onclick='window.abrirOCById("${o.id}")'>
-                            <b>${o.id} ${calcularDuracion(o.si, o.fi)}:</b> 
-                            (${formatH_raw(o.si)} - ${formatH_raw(o.fi)})${status}
-                        </span>`;
+                return `<span class="tag-oc" onclick='window.abrirOCById("${o.id}")'><b>${o.id} ${calcularDuracion(o.si, o.fi)}:</b> (${formatH_raw(o.si)} - ${formatH_raw(o.fi)})${status}</span>`;
             }).join('');
             
-            tr.innerHTML = `
-                <td style="font-weight:bold; white-space: nowrap;">
-                    ${u}
-                    <span class="turno-label">Turno: ${rH}</span>
-                </td>
-                <td style="width: 1%; white-space: nowrap;"><span class="esfuerzo-badge">${calcularEsfuerzoTexto(bloquesOcupados)}</span></td>
-                <td>${ocsHtml}</td>
-            `;
+            tr.innerHTML = `<td>${u}<span class="turno-label">Turno: ${rH}</span></td><td style="width: 1%; white-space: nowrap;"><span class="esfuerzo-badge">${calcularEsfuerzoTexto(bloquesOcupados)}</span></td><td>${ocsHtml}</td>`;
             resBody.appendChild(tr);
         });
     }
 
-    window.abrirOCById = (id) => {
-        const oc = asignaciones.find(a => a.id === id);
-        if(oc) window.abrir(oc);
-    };
+    window.abrirOCById = (id) => { const oc = asignaciones.find(a => a.id === id); if(oc) window.abrir(oc); };
 
     window.asignacionAutomatica = () => {
         const pendientes = asignaciones.filter(a => a.u === "SIN_ASIGNAR").sort((a,b) => (b.fi-b.si) - (a.fi-a.si));
         pendientes.forEach(oc => {
-            let mejorCandidato = null;
-            let menorCarga = Infinity;
+            let mejorCandidato = null; let menorCarga = Infinity;
             personalList.forEach(p => {
-                let disponibleTodoElRango = true;
-                for(let i = oc.si; i < oc.fi; i++) {
-                    if(i >= TOTAL_BLOQUES || !esBloqueDisponible(i, p.n, p.t)) { disponibleTodoElRango = false; break; }
-                }
-                if(!disponibleTodoElRango) return;
-                const tieneTraslape = asignaciones.some(a => a.u === p.n && !(oc.fi <= a.si || oc.si >= a.fi));
-                if(tieneTraslape) return;
-                let cargaActual = asignaciones.filter(a => a.u === p.n).reduce((sum, a) => {
-                    return sum + (a.fi - a.si);
-                }, 0);
-                if(cargaActual < menorCarga) { menorCarga = cargaActual; mejorCandidato = p.n; }
+                let okRango = true;
+                for(let i = oc.si; i < oc.fi; i++) if(i >= TOTAL_BLOQUES || !esBloqueDisponible(i, p.n, p.t)) { okRango = false; break; }
+                if(!okRango) return;
+                const traslape = asignaciones.some(a => a.u === p.n && !(oc.fi <= a.si || oc.si >= a.fi));
+                if(traslape) return;
+                let carga = asignaciones.filter(a => a.u === p.n).reduce((sum, a) => sum + (a.fi - a.si), 0);
+                if(carga < menorCarga) { menorCarga = carga; mejorCandidato = p.n; }
             });
             if(mejorCandidato) oc.u = mejorCandidato;
         });
         window.dibujar();
     };
 
-    let sel = null;
     window.abrir = (oc) => {
-        sel = oc;
-        document.getElementById('mOC').innerText = oc.id;
+        sel = oc; document.getElementById('mOC').innerText = oc.id;
         document.getElementById('mInfo').innerText = `Horario OC: (${formatH_raw(oc.si)} - ${formatH_raw(oc.fi)}) ${calcularDuracion(oc.si, oc.fi)}`;
         const s = document.getElementById('sU');
-        
         let opts = `<option value="SIN_ASIGNAR">SIN ASIGNAR</option>`;
         opts += personalList.map(p => {
             let ok = true;
-            for(let i=oc.si; i<oc.fi; i++) {
-                if(i >= TOTAL_BLOQUES || !esBloqueDisponible(i, p.n, p.t)) { ok = false; break; }
-            }
-            
-            let cargaBloques = asignaciones.filter(a => a.u === p.n).reduce((sum, a) => {
-                return sum + (a.fi - a.si);
-            }, 0);
-            const cargaTexto = `[${calcularEsfuerzoTexto(cargaBloques)}]`;
-
-            return `<option value="${p.n}" class="${ok ? 'opt-verde' : 'opt-rojo'}" ${p.n === oc.u ? 'selected' : ''}>
-                        ${p.n} ${cargaTexto} (${p.t})
-                    </option>`;
+            for(let i=oc.si; i<oc.fi; i++) if(i >= TOTAL_BLOQUES || !esBloqueDisponible(i, p.n, p.t)) { ok = false; break; }
+            let carga = asignaciones.filter(a => a.u === p.n).reduce((sum, a) => sum + (a.fi - a.si), 0);
+            return `<option value="${p.n}" class="${ok ? 'opt-verde' : 'opt-rojo'}" ${p.n === oc.u ? 'selected' : ''}>${p.n} [${calcularEsfuerzoTexto(carga)}] (${p.t})</option>`;
         }).join('');
-        
         s.innerHTML = opts;
-        document.getElementById('modal').style.display='block';
-        document.getElementById('overlay').style.display='block';
+        document.getElementById('modal').style.display='block'; document.getElementById('overlay').style.display='block';
     }
     window.cerrar = () => { document.getElementById('modal').style.display='none'; document.getElementById('overlay').style.display='none'; }
     window.aplicar = () => { sel.u = document.getElementById('sU').value; cerrar(); window.dibujar(); }
