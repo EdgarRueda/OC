@@ -2,60 +2,68 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Planificador Inteligente Pro - Auditoría y Gemini IA</title>
+    <title>Planificador Inteligente Pro - Rango 32h</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script type="importmap">
-      {
-        "imports": {
-          "@google/generative-ai": "https://esm.run/@google/generative-ai"
-        }
-      }
-    </script>
     <style>
         :root { --p-green: #d4edda; --border: #dee2e6; --blue: #3182ce; --conflict: #feb2b2; --danger-text: #9b2c2c; --ok-text: #22543d; }
-        body { font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; padding: 20px; background: #f7fafc; color: #2d3748; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; background: #f7fafc; color: #2d3748; }
         .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; }
         .grid-tables { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
         .collapsed { display: none; }
-        .matrix-wrapper { overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: white; max-height: 50vh; }
-        table.matrix { border-collapse: separate; border-spacing: 0; table-layout: fixed; min-width: 2600px; }
-        table.matrix th, table.matrix td { border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); text-align: center; font-size: 10px; height: 42px; width: 50px; }
-        .col-user { width: 240px !important; font-weight: 600; background: #f8fafc !important; position: sticky; left: 0; z-index: 20; border-right: 3px solid #cbd5e0 !important; text-align: left !important; padding-left: 10px !important; }
-        .badge-count { background: #edf2f7; color: #4a5568; font-size: 10px; padding: 2px 6px; border-radius: 10px; margin-top: 4px; display: inline-block; }
+        .grid-tables table { font-size: 11px; line-height: 1; border-collapse: collapse; }
+        .grid-tables th, .grid-tables td { padding: 2px 4px; height: auto; border: 1px solid var(--border); }
+        .oc-tray { display: flex; flex-wrap: wrap; gap: 8px; padding: 15px; background: #edf2f7; border: 2px dashed #cbd5e0; border-radius: 8px; min-height: 50px; margin-bottom: 20px; }
+        .oc-item { padding: 6px 12px; background: var(--blue); color: white; border-radius: 4px; cursor: grab; font-size: 11px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); user-select: none; }
+        .matrix-wrapper { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; background: white; margin-top: 10px; }
+        table { border-collapse: separate; border-spacing: 0; width: 100%; }
+        table.matrix { table-layout: fixed; min-width: 3200px; }
+        th, td { border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); text-align: center; font-size: 10px; height: 42px; }
+        .col-user { width: 240px !important; font-weight: 600; background: #f8fafc !important; position: sticky; left: 0; z-index: 20; border-right: 3px solid #cbd5e0 !important; text-align: left !important; padding-left: 10px !important; transition: background 0.2s; }
         thead tr th { position: sticky; top: 0; z-index: 10; background: #edf2f7; }
+        .row-unassigned { background: #fff5f5 !important; }
+        .row-unassigned td.col-user { background: #fff5f5 !important; color: #c53030; }
         .cell-active { background-color: var(--p-green); }
-        .cell-oc { font-weight: bold; cursor: pointer; color: white; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
+        .cell-oc { font-weight: bold; cursor: pointer; color: white; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); font-size: 9px; line-height: 1.1; padding: 2px; }
         .cell-alert { background-color: var(--conflict) !important; border: 2px solid #f56565 !important; color: var(--danger-text) !important; }
-        .audit-list { list-style: none; padding: 0; }
-        .audit-item { padding: 8px; border-bottom: 1px solid #eee; font-size: 13px; display: flex; justify-content: space-between; align-items: center; }
-        .btn { padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; margin: 2px; transition: 0.2s; }
+        .btn { padding: 8px 14px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; margin: 2px; transition: 0.2s; font-size: 12px; }
         .btn-blue { background: var(--blue); color: white; }
-        .btn-ai { background: #1a73e8; color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-        .opt-verde { background-color: #c6f6d5 !important; color: #22543d !important; }
+        .btn-json { background: #6b46c1; color: white; }
+        .btn-auto { background: #d53f8c; color: white; }
+        .opt-verde { background-color: #c6f6d5 !important; color: #22543d !important; font-weight: bold; }
         .opt-rojo { background-color: #fed7d7 !important; color: #9b2c2c !important; }
-        .ai-panel { background: #f0f7ff; border: 1px solid #3182ce; border-radius: 8px; padding: 15px; margin-top: 15px; }
-        .suggestion-card { background: white; border: 1px solid #cbd5e0; padding: 10px; border-radius: 8px; margin-bottom: 8px; cursor: pointer; transition: 0.2s; }
-        .suggestion-card:hover { border-color: #3182ce; background: #e6f0ff; }
+        
+        .resumen-table { margin-top: 10px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; width: auto; min-width: 600px; }
+        .resumen-table th { background: #4a5568; color: white; padding: 8px 15px; font-size: 12px; text-align: center; }
+        .resumen-table td { padding: 8px 15px; text-align: left; background: white; font-size: 11px; border-bottom: 1px solid var(--border); }
+        .tag-oc { display: inline-block; background: #edf2f7; border: 1px solid #cbd5e0; padding: 4px 8px; border-radius: 4px; margin: 2px; font-size: 10px; cursor: pointer; transition: 0.2s; }
+        .tag-oc:hover { background: #e2e8f0; border-color: var(--blue); }
+        .tag-fuera-turno { color: #c53030; font-weight: bold; }
+        .esfuerzo-badge { font-weight: bold; color: var(--blue); background: #ebf8ff; padding: 3px 8px; border-radius: 5px; border: 1px solid #bee3f8; display: inline-block; }
+        .turno-label { display: block; font-size: 9px; color: #718096; font-weight: normal; margin-top: 2px; }
+        .day-label { display: block; font-size: 8px; color: #718096; font-weight: normal; margin-bottom: 2px; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <div style="display: flex; justify-content: space-between;">
-        <h2>⚙️ Gestión Operativa e IA</h2>
-        <button class="btn btn-blue" style="background:#a0aec0" onclick="document.getElementById('configSec').classList.toggle('collapsed')">Configuración</button>
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2>⚙️ Gestión Operativa (Rango [00:00] - [08:00+1])</h2>
+        <div>
+            <input type="date" id="fechaProg" class="btn" style="border: 1px solid #ccc;">
+            <button class="btn btn-blue" onclick="document.getElementById('configSec').classList.toggle('collapsed')">Configuración</button>
+        </div>
     </div>
-    <div id="configSec" class="collapsible">
+    <div id="configSec" class="collapsible collapsed">
         <div style="margin: 15px 0;">
             <input type="file" id="upT" style="display:none" onchange="importar('turnos', this)">
             <input type="file" id="upH" style="display:none" onchange="importar('horarios', this)">
             <input type="file" id="upO" style="display:none" onchange="importar('ocs', this)">
-            <button class="btn btn-blue" onclick="document.getElementById('upT').click()">👥 Turnos</button>
-            <button class="btn btn-blue" onclick="document.getElementById('upH').click()">🕒 Horarios</button>
-            <button class="btn btn-blue" style="background:#ed8936" onclick="document.getElementById('upO').click()">📦 Cargar OCs</button>
-            <button class="btn btn-blue" style="background:#38a169" onclick="plantilla('save')">💾 Guardar Plantilla</button>
-            <button class="btn btn-blue" style="background:#38a169" onclick="plantilla('load')">📂 Cargar Plantilla</button>
+            <button class="btn btn-blue" onclick="document.getElementById('upT').click()">👥 Cargar Turnos</button>
+            <button class="btn btn-blue" onclick="document.getElementById('upH').click()">🕒 Cargar Horarios</button>
+            <button class="btn btn-blue" style="background:#ed8936" onclick="document.getElementById('upO').click()">📦 Cargar Órdenes de Cambio</button>
+            <button class="btn btn-blue" style="background:#38a169" onclick="plantilla('save')">💾 Guardar Config</button>
+            <button class="btn btn-blue" style="background:#38a169" onclick="plantilla('load')">📂 Cargar Config</button>
         </div>
         <div class="grid-tables">
             <div><h4>Personal</h4><table id="tP"><thead><tr><th>Nombre</th><th>Turno</th></tr></thead><tbody id="bP"></tbody></table></div>
@@ -65,19 +73,18 @@
 </div>
 
 <div class="card">
+    <h3>📦 Listado de Órdenes de Cambio Sin Asignar</h3>
+    <div id="ocTray" class="oc-tray"></div>
     <div style="margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
         <div>
-            <button class="btn btn-blue" onclick="generar()">⚡ ACTUALIZAR MATRIZ</button>
-            <button class="btn btn-ai" onclick="pedirSugerenciaIA()">🤖 ANALIZAR CON GEMINI IA</button>
+            <button class="btn btn-blue" onclick="generar()">⚡ REFRESCAR MATRIZ</button>
+            <button class="btn btn-auto" onclick="asignacionAutomatica()">🤖 ASIGNACIÓN AUTO</button>
+            <button class="btn btn-json" onclick="exportarAsignacion()">📤 EXPORTAR JSON</button>
+            <button class="btn btn-json" onclick="document.getElementById('importJson').click()">📥 CARGAR JSON</button>
+            <input type="file" id="importJson" style="display:none" accept=".json" onchange="importarAsignacion(this)">
         </div>
         <div id="totalErrorsBadge" style="font-weight:bold;"></div>
     </div>
-    
-    <div id="aiPanel" class="ai-panel" style="display:none">
-        <strong>🤖 Sugerencias de Reasignación (Haz clic para aplicar):</strong>
-        <div id="aiSuggestionsList" style="margin-top:10px;"></div>
-    </div>
-
     <div class="matrix-wrapper">
         <table class="matrix" id="mainTable">
             <thead><tr id="hH"></tr></thead>
@@ -87,17 +94,31 @@
 </div>
 
 <div class="card">
-    <h3>📋 Resumen de Auditoría</h3>
-    <div style="display: flex; gap: 30px; margin-bottom: 15px; background: #f8fafc; padding: 15px; border-radius: 8px;">
-        <div><strong>Total OCs:</strong> <span id="auditTotalOCs">0</span></div>
-        <div><strong>Conflictos:</strong> <span id="auditTotalErrors" class="label-danger">0</span></div>
+    <h3>📊 Resumen de Asignaciones</h3>
+    <table class="resumen-table">
+        <thead>
+            <tr>
+                <th>Personal</th>
+                <th>Esfuerzo Total</th>
+                <th>Órdenes de Cambio y Horarios (Click para reasignar)</th>
+            </tr>
+        </thead>
+        <tbody id="resumenBody"></tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h3>📋 Auditoría de Conflictos</h3>
+    <div style="display: flex; gap: 30px; margin-bottom: 5px; background: #f8fafc; padding: 10px; border-radius: 8px;">
+        <div><strong>Total Órdenes de Cambio:</strong> <span id="auditTotalOCs">0</span></div>
+        <div><strong>Conflictos:</strong> <span id="auditTotalErrors" style="color:red; font-weight:bold;">0</span></div>
     </div>
-    <ul id="auditList" class="audit-list"></ul>
+    <ul id="auditList" style="list-style: none; padding: 0; font-size: 12px;"></ul>
 </div>
 
 <div id="overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:99;" onclick="cerrar()"></div>
 <div id="modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:white; padding:25px; border-radius:12px; box-shadow:0 20px 40px rgba(0,0,0,0.3); z-index:100; width:450px;">
-    <h3>🔄 Reasignar OC <span id="mOC" style="color:var(--blue)"></span></h3>
+    <h3>🔄 Asignar Orden de Cambio <span id="mOC" style="color:var(--blue)"></span></h3>
     <p id="mInfo" style="font-size:12px; color:#666; background:#f1f3f4; padding:8px; border-radius:5px;"></p>
     <select id="sU" style="width:100%; padding:12px; border-radius:8px; border:1px solid #ccc;"></select>
     <div style="display:flex; gap:10px; margin-top:20px;">
@@ -106,18 +127,70 @@
     </div>
 </div>
 
-<script type="module">
-    import { GoogleGenerativeAI } from "@google/generative-ai";
-
+<script>
     let rawO = [], asignaciones = [], hMap = {}, personalList = [];
+    const TOTAL_BLOQUES = 64; 
 
-    // --- FUNCIONES DE CARGA ---
+    document.getElementById('fechaProg').valueAsDate = new Date();
+
+    const formatH = (idx) => {
+        let h = Math.floor(idx / 2) % 24;
+        let m = idx % 2 == 0 ? "00" : "30";
+        let label = idx < 48 ? "Día Actual" : "Día Siguiente";
+        return `<span class="day-label">${label}</span>[${h.toString().padStart(2, '0')}:${m}]`;
+    };
+
+    const formatH_raw = (idx) => {
+        let h = Math.floor(idx / 2) % 24;
+        let m = idx % 2 == 0 ? "00" : "30";
+        return `${h.toString().padStart(2, '0')}:${m}`;
+    };
+
+    const calcularDuracion = (si, fi) => {
+        let d = fi - si;
+        if (d < 0) d += 48;
+        let min = d * 30;
+        return `[${Math.floor(min/60).toString().padStart(2,'0')}:${(min%60).toString().padStart(2,'0')}]`;
+    };
+
+    const calcularEsfuerzoTexto = (bloques) => {
+        let totalMinutos = bloques * 30;
+        let h = Math.floor(totalMinutos / 60);
+        let m = totalMinutos % 60;
+        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}h`;
+    };
+
+    const getBloqueDesdeFecha = (fecha) => {
+        let h = fecha.getHours();
+        let m = fecha.getMinutes();
+        let bloqueMin = 0;
+        if (m >= 15 && m < 45) {
+            bloqueMin = 1;
+        } else if (m >= 45) {
+            h++;
+            bloqueMin = 0;
+        }
+        return (h * 2) + bloqueMin;
+    };
+
     window.importar = (tipo, input) => {
         const reader = new FileReader();
         reader.onload = (e) => {
             const data = XLSX.utils.sheet_to_json(XLSX.read(e.target.result, {type:'binary', cellDates:true}).Sheets[XLSX.read(e.target.result, {type:'binary', cellDates:true}).SheetNames[0]]);
-            if (tipo === 'ocs') { rawO = data; generar(); }
-            else {
+            if (tipo === 'ocs') { 
+                rawO = data;
+                asignaciones = rawO.map(oc => {
+                    const di = new Date(oc['FECHA INICIO']), df = new Date(oc['FECHA FIN']);
+                    return { 
+                        id: String(oc['OC'] || oc['Orden de Cambio']), 
+                        si: getBloqueDesdeFecha(di), 
+                        fi: getBloqueDesdeFecha(df), 
+                        u: "SIN_ASIGNAR", 
+                        clr: `hsl(${(parseInt(oc['OC'] || 1)*137)%360}, 65%, 45%)` 
+                    };
+                });
+                generar(); 
+            } else {
                 const tbody = tipo === 'turnos' ? 'bP' : 'bH';
                 document.getElementById(tbody).innerHTML = data.map(r => `<tr><td contenteditable="true">${Object.values(r)[0]}</td><td contenteditable="true">${Object.values(r)[1]}</td></tr>`).join('');
             }
@@ -125,14 +198,33 @@
         reader.readAsBinaryString(input.files[0]);
     }
 
+    window.exportarAsignacion = () => {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(asignaciones));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", "programacion_ordenes_cambio.json");
+        document.body.appendChild(downloadAnchorNode);
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+    };
+
+    window.importarAsignacion = (input) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            asignaciones = JSON.parse(e.target.result);
+            generar();
+        };
+        reader.readAsText(input.files[0]);
+    };
+
     window.plantilla = (acc) => {
         if(acc === 'save') {
             const p = Array.from(document.querySelectorAll("#bP tr")).map(tr => [tr.cells[0].innerText, tr.cells[1].innerText]);
             const h = Array.from(document.querySelectorAll("#bH tr")).map(tr => [tr.cells[0].innerText, tr.cells[1].innerText]);
-            localStorage.setItem('plan_final_ia', JSON.stringify({p, h}));
-            alert("Plantilla guardada.");
+            localStorage.setItem('plan_final_32h', JSON.stringify({p, h}));
+            alert("Configuración guardada.");
         } else {
-            const d = JSON.parse(localStorage.getItem('plan_final_ia'));
+            const d = JSON.parse(localStorage.getItem('plan_final_32h'));
             if(d) {
                 document.getElementById('bP').innerHTML = d.p.map(x => `<tr><td contenteditable="true">${x[0]}</td><td contenteditable="true">${x[1]}</td></tr>`).join('');
                 document.getElementById('bH').innerHTML = d.h.map(x => `<tr><td contenteditable="true">${x[0]}</td><td contenteditable="true">${x[1]}</td></tr>`).join('');
@@ -140,186 +232,228 @@
         }
     }
 
-    // --- LÓGICA DE MATRIZ ---
+    const esBloqueDisponible = (bloque, usuario, leyendaTurno) => {
+        const hReal = bloque % 48;
+        const info = hMap[leyendaTurno];
+        if(!info) return false;
+        if(usuario.includes("Hernan Erazo") || leyendaTurno === "T2") {
+            return (bloque >= 40 && bloque < 56);
+        }
+        return info.si < info.fi ? (hReal >= info.si && hReal < info.fi) : (hReal >= info.si || hReal < info.fi);
+    };
+
     window.generar = () => {
         hMap = {};
         Array.from(document.querySelectorAll("#bH tr")).forEach(tr => {
+            const ley = tr.cells[0].innerText.trim().toUpperCase();
             const r = tr.cells[1].innerText.trim();
-            if(r.includes('-')) {
+            if(ley === 'T2') {
+                hMap['T2'] = { si: 20*2, fi: 4*2, raw: "20:00 - 04:00" }; 
+            } else if(r.includes('-')) {
                 const [i, f] = r.split('-');
                 const [hi, mi] = i.split(':').map(Number);
                 const [hf, mf] = f.split(':').map(Number);
-                hMap[tr.cells[0].innerText.trim()] = { si: hi*2 + (mi>=30?1:0), fi: hf*2 + (mf>=30?1:0) };
+                let bSi = (hi * 2) + (mi >= 30 ? 1 : 0);
+                let bFi = (hf * 2) + (mf >= 30 ? 1 : 0);
+                hMap[tr.cells[0].innerText.trim()] = { si: bSi, fi: bFi, raw: r };
             }
         });
         
-        personalList = Array.from(document.querySelectorAll("#bP tr")).map(tr => ({n: tr.cells[0].innerText.trim(), t: tr.cells[1].innerText.trim()})).filter(x => x.n !== "");
+        personalList = Array.from(document.querySelectorAll("#bP tr"))
+            .map(tr => ({n: tr.cells[0].innerText.trim(), t: tr.cells[1].innerText.trim()}))
+            .filter(x => x.n !== "" && !['L','VA','LIBRE','VACACIONES'].includes(x.t.toUpperCase()));
+
         const head = document.getElementById('hH');
         const body = document.getElementById('bM');
         head.innerHTML = '<th class="col-user">Personal / Carga</th>';
-        for(let i=0; i<48; i++) head.innerHTML += `<th>${Math.floor(i/2).toString().padStart(2,'0')}:${i%2==0?'00':'30'}</th>`;
+        for(let i=0; i<TOTAL_BLOQUES; i++) head.innerHTML += `<th>${formatH(i)}</th>`;
 
         body.innerHTML = '';
+        const trUn = document.createElement('tr');
+        trUn.id = 'row-SIN_ASIGNAR'; trUn.className = 'row-unassigned';
+        trUn.innerHTML = `<td class="col-user" id="col-SIN_ASIGNAR">📦 Órdenes SIN ASIGNAR</td>`;
+        for(let i=0; i<TOTAL_BLOQUES; i++) trUn.innerHTML += `<td data-h="${i}"></td>`;
+        body.appendChild(trUn);
+
         personalList.forEach(p => {
             const tr = document.createElement('tr');
             tr.id = `row-${p.n.replace(/\s+/g, '_')}`;
-            tr.innerHTML = `<td class="col-user">${p.n}<br><span class="badge-count" id="count-${p.n.replace(/\s+/g, '_')}">0 OCs</span></td>`;
-            const info = hMap[p.t];
-            for(let i=0; i<48; i++) {
-                const td = document.createElement('td'); 
-                td.dataset.h = i;
-                if(info) {
-                    const ok = info.si < info.fi ? (i>=info.si && i<info.fi) : (i>=info.si || i<info.fi);
-                    if(ok) td.classList.add('cell-active');
-                }
+            tr.innerHTML = `<td class="col-user" id="name-${p.n.replace(/\s+/g, '_')}">${p.n}<br><small>${p.t}</small></td>`;
+            for(let i=0; i<TOTAL_BLOQUES; i++) {
+                const td = document.createElement('td'); td.dataset.h = i;
+                if(esBloqueDisponible(i, p.n, p.t)) td.classList.add('cell-active');
                 tr.appendChild(td);
             }
             body.appendChild(tr);
-        });
-
-        const activos = personalList.filter(x => !['L','VA','LIBRE','VACACIONES'].includes(x.t.toUpperCase()));
-        asignaciones = rawO.map((oc, idx) => {
-            const di = new Date(oc['FECHA INICIO']), df = new Date(oc['FECHA FIN']);
-            return {
-                id: oc['OC'], 
-                si: di.getHours()*2 + (di.getMinutes()>=30?1:0),
-                fi: df.getHours()*2 + (df.getMinutes()>=30?1:0),
-                u: activos.length > 0 ? activos[idx % activos.length].n : personalList[0].n,
-                clr: `hsl(${(oc['OC']*137)%360}, 65%, 45%)`
-            };
         });
         window.dibujar();
     }
 
     window.dibujar = () => {
-        document.querySelectorAll('td[dataset-h]').forEach(c => { c.innerHTML=''; c.style.backgroundColor=''; c.classList.remove('cell-oc','cell-alert'); c.colSpan = 1; c.style.display = ''; delete c.dataset.err; });
-        const conteos = {}, ocupacion = {};
-        let errs = 0, auditHTML = "";
+        document.querySelectorAll('td[data-h]').forEach(c => { c.innerHTML=''; c.style.backgroundColor=''; c.classList.remove('cell-oc','cell-alert'); c.colSpan = 1; c.style.display = ''; });
+        const tray = document.getElementById('ocTray'); tray.innerHTML = '';
+        const ocupacion = {};
+        let errs = 0, auditHTML = "", resumenData = {};
+        let conteo = { "SIN_ASIGNAR": 0 };
+        personalList.forEach(p => conteo[p.n] = 0);
 
         asignaciones.forEach(oc => {
-            const uId = oc.u.replace(/\s+/g, '_');
-            conteos[uId] = (conteos[uId] || 0) + 1;
-            const row = document.getElementById(`row-${uId}`);
-            let primera = null, ancho = 0, conflict = false, type = "";
+            const isUn = oc.u === "SIN_ASIGNAR";
+            const uId = isUn ? "SIN_ASIGNAR" : oc.u.replace(/\s+/g, '_');
+            conteo[oc.u]++;
 
-            for(let i=oc.si; i<=oc.fi; i++) {
-                const key = `${oc.u}-${i}`;
-                ocupacion[key] = (ocupacion[key] || 0) + 1;
+            if (isUn) {
+                const item = document.createElement('div');
+                item.className = 'oc-item'; item.draggable = true;
+                item.innerText = `${oc.id} - (${formatH_raw(oc.si)} - ${formatH_raw(oc.fi)}) ${calcularDuracion(oc.si, oc.fi)}`;
+                item.ondragstart = (e) => e.dataTransfer.setData("ocId", oc.id);
+                item.onclick = () => window.abrir(oc);
+                tray.appendChild(item);
+            } else {
+                if(!resumenData[oc.u]) resumenData[oc.u] = [];
+                resumenData[oc.u].push(oc);
+            }
+
+            const row = document.getElementById(`row-${uId}`);
+            if(!row) return;
+
+            let primera = null, ancho = 0, conflict = false, type = "";
+            for(let i=oc.si; i<oc.fi; i++) {
+                if(i >= TOTAL_BLOQUES) break;
+                const userKey = `${oc.u}-${i}`;
+                ocupacion[userKey] = (ocupacion[userKey] || 0) + 1;
                 const cell = Array.from(row.cells).find(c => c.dataset.h == i);
                 if(cell) {
-                    if (i === oc.si) primera = cell; else { cell.style.display = 'none'; ancho++; }
-                    if (ocupacion[key] > 1) { conflict = true; type = "Traslape"; }
-                    if (!cell.classList.contains('cell-active')) { conflict = true; type = type ? type + "/Fuera Turno" : "Fuera Turno"; }
+                    if (i === oc.si) primera = cell;
+                    else { cell.style.display = 'none'; ancho++; }
+                    if (!isUn) {
+                        if (ocupacion[userKey] > 1) { conflict = true; type = "Traslape"; }
+                        if (!cell.classList.contains('cell-active')) { conflict = true; type = type ? type + "/Fuera Turno" : "Fuera Turno"; }
+                    }
                 }
             }
             if(primera) {
                 primera.colSpan = ancho + 1;
-                primera.style.backgroundColor = oc.clr;
+                primera.style.backgroundColor = isUn ? '#cbd5e0' : oc.clr;
                 primera.classList.add('cell-oc');
-                primera.innerHTML = oc.id;
+                if(isUn) primera.style.color = '#4a5568';
+                primera.innerHTML = `${oc.id}<br>${calcularDuracion(oc.si, oc.fi)}`;
                 primera.onclick = () => window.abrir(oc);
-                if(conflict) {
-                    primera.classList.add('cell-alert');
-                    errs++;
-                    auditHTML += `<li class="audit-item"><span><strong>OC ${oc.id}</strong> (${oc.u}) - ${type}</span> <button class="btn btn-blue" style="font-size:10px" onclick="window.abrirOCById('${oc.id}')">Corregir</button></li>`;
-                }
+                if(conflict && !isUn) { primera.classList.add('cell-alert'); errs++; auditHTML += `<li><strong>Orden ${oc.id}</strong> (${oc.u}) - <span style="color:red">${type}</span></li>`; }
             }
         });
 
-        document.querySelectorAll('.badge-count').forEach(b => {
-            const id = b.id.replace('count-', '');
-            b.innerText = `${conteos[id] || 0} OCs`;
+        document.getElementById('col-SIN_ASIGNAR').innerText = `📦 Órdenes SIN ASIGNAR (${conteo["SIN_ASIGNAR"]})`;
+        personalList.forEach(p => {
+            const col = document.getElementById(`name-${p.n.replace(/\s+/g, '_')}`);
+            if(col) col.innerHTML = `${p.n} (${conteo[p.n]})<br><small>${p.t}</small>`;
         });
-        document.getElementById('totalErrorsBadge').innerHTML = errs > 0 ? `<span style="color:var(--danger-text)">⚠️ Conflictos: ${errs}</span>` : `<span style="color:var(--ok-text)">✅ Planificación Correcta</span>`;
+
+        document.getElementById('totalErrorsBadge').innerHTML = errs > 0 ? `<span style="color:var(--danger-text)">⚠️ Conflictos: ${errs}</span>` : `<span style="color:var(--ok-text)">✅ OK</span>`;
         document.getElementById('auditTotalOCs').innerText = asignaciones.length;
         document.getElementById('auditTotalErrors').innerText = errs;
-        document.getElementById('auditList').innerHTML = auditHTML || "<li>✅ No hay conflictos</li>";
+        document.getElementById('auditList').innerHTML = auditHTML || "<li>✅ Sin conflictos</li>";
+        
+        const resBody = document.getElementById('resumenBody'); resBody.innerHTML = '';
+        Object.keys(resumenData).sort().forEach(u => {
+            const tr = document.createElement('tr');
+            const pData = personalList.find(x => x.n === u);
+            const rH = (pData && hMap[pData.t]) ? hMap[pData.t].raw : "No definido";
+
+            let bloquesOcupados = resumenData[u].reduce((acc, o) => {
+                let d = o.fi - o.si;
+                return acc + (d < 0 ? d + 48 : d);
+            }, 0);
+            
+            const ocsHtml = resumenData[u].map(o => {
+                // VALIDACIÓN: ¿La OC asignada coincide con su rango activo?
+                let valida = true;
+                for(let i = o.si; i < o.fi; i++) {
+                    if(!esBloqueDisponible(i, pData.n, pData.t)) { valida = false; break; }
+                }
+                const status = valida ? "" : ' <span class="tag-fuera-turno">(⚠️ Fuera de Turno)</span>';
+                
+                return `<span class="tag-oc" onclick='window.abrirOCById("${o.id}")'>
+                            <b>${o.id} ${calcularDuracion(o.si, o.fi)}:</b> 
+                            (${formatH_raw(o.si)} - ${formatH_raw(o.fi)})${status}
+                        </span>`;
+            }).join('');
+            
+            tr.innerHTML = `
+                <td style="font-weight:bold; white-space: nowrap;">
+                    ${u}
+                    <span class="turno-label">Turno: ${rH}</span>
+                </td>
+                <td style="width: 1%; white-space: nowrap;"><span class="esfuerzo-badge">${calcularEsfuerzoTexto(bloquesOcupados)}</span></td>
+                <td>${ocsHtml}</td>
+            `;
+            resBody.appendChild(tr);
+        });
     }
 
-    // --- FUNCIONES IA GEMINI ---
-    window.pedirSugerenciaIA = async () => {
-        let key = localStorage.getItem('GEMINI_KEY');
-        if (!key) {
-            key = prompt("Introduce tu API Key de Gemini:");
-            if (key) localStorage.setItem('GEMINI_KEY', key); else return;
-        }
-
-        const panel = document.getElementById('aiPanel');
-        const list = document.getElementById('aiSuggestionsList');
-        panel.style.display = 'block';
-        list.innerHTML = "Generando sugerencias con Gemini 3.1 Flash...";
-
-        try {
-            const genAI = new GoogleGenerativeAI(key);
-            const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
-
-            const dataContext = {
-                personal: personalList,
-                horarios: hMap,
-                conflictos: asignaciones.filter(oc => {
-                    const row = document.getElementById(`row-${oc.u.replace(/\s+/g, '_')}`);
-                    const cell = Array.from(row.cells).find(c => c.dataset.h == oc.si);
-                    return cell && cell.classList.contains('cell-alert');
-                })
-            };
-
-            const prompt = `Eres un asistente de logística. Analiza estos conflictos de OCs (Órdenes de Compra) vs Turnos.
-            DATOS: ${JSON.stringify(dataContext)}
-            REGLA: Una OC debe estar en el horario 'Verde' del usuario (si < fi). 
-            TAREA: Devuelve SOLO un array JSON de objetos: [{"oc": "ID", "nuevoResponsable": "Nombre", "motivo": "Explicación corta"}]. No escribas nada más que el JSON.`;
-
-            const result = await model.generateContent(prompt);
-            const responseText = result.response.text();
-            const cleanJson = responseText.replace(/```json|```/g, "");
-            const suggestions = JSON.parse(cleanJson);
-
-            list.innerHTML = "";
-            suggestions.forEach(s => {
-                const div = document.createElement('div');
-                div.className = 'suggestion-card';
-                div.innerHTML = `<strong>📦 OC ${s.oc}</strong> reasignar a <strong>👤 ${s.nuevoResponsable}</strong><br><small>${s.motivo}</small>`;
-                div.onclick = () => {
-                    const oc = asignaciones.find(a => a.id == s.oc);
-                    if (oc) {
-                        oc.u = s.nuevoResponsable;
-                        window.dibujar();
-                        div.style.opacity = "0.5";
-                        div.onclick = null;
-                        div.innerHTML += " ✅ Aplicado";
-                    }
-                };
-                list.appendChild(div);
-            });
-        } catch (e) {
-            list.innerHTML = "❌ Error en IA: " + e.message;
-            console.error(e);
-        }
-    }
-
-    // --- MODAL Y AUXILIARES ---
-    let currentOC = null;
+    // Nueva función para abrir por ID desde el resumen
     window.abrirOCById = (id) => {
-        const oc = asignaciones.find(a => a.id == id);
+        const oc = asignaciones.find(a => a.id === id);
         if(oc) window.abrir(oc);
-    }
+    };
 
+    window.asignacionAutomatica = () => {
+        const pendientes = asignaciones.filter(a => a.u === "SIN_ASIGNAR").sort((a,b) => (b.fi-b.si) - (a.fi-a.si));
+        pendientes.forEach(oc => {
+            let mejorCandidato = null;
+            let menorCarga = Infinity;
+            personalList.forEach(p => {
+                let disponibleTodoElRango = true;
+                for(let i = oc.si; i < oc.fi; i++) {
+                    if(!esBloqueDisponible(i, p.n, p.t)) { disponibleTodoElRango = false; break; }
+                }
+                if(!disponibleTodoElRango) return;
+                const tieneTraslape = asignaciones.some(a => a.u === p.n && !(oc.fi <= a.si || oc.si >= a.fi));
+                if(tieneTraslape) return;
+                let cargaActual = asignaciones.filter(a => a.u === p.n).reduce((sum, a) => {
+                    let d = a.fi - a.si;
+                    return sum + (d < 0 ? d + 48 : d);
+                }, 0);
+                if(cargaActual < menorCarga) { menorCarga = cargaActual; mejorCandidato = p.n; }
+            });
+            if(mejorCandidato) oc.u = mejorCandidato;
+        });
+        window.dibujar();
+    };
+
+    let sel = null;
     window.abrir = (oc) => {
-        currentOC = oc;
+        sel = oc;
         document.getElementById('mOC').innerText = oc.id;
-        document.getElementById('mInfo').innerText = `Horario: ${Math.floor(oc.si/2)}:${oc.si%2==0?'00':'30'} a ${Math.floor(oc.fi/2)}:${oc.fi%2==0?'00':'30'}`;
+        document.getElementById('mInfo').innerText = `Horario OC: (${formatH_raw(oc.si)} - ${formatH_raw(oc.fi)}) ${calcularDuracion(oc.si, oc.fi)}`;
         const s = document.getElementById('sU');
-        s.innerHTML = personalList.map(p => {
-            const info = hMap[p.t];
-            const ok = info ? (oc.si >= info.si && oc.fi <= info.fi) : false;
-            return `<option value="${p.n}" class="${ok ? 'opt-verde' : 'opt-rojo'}" ${p.n === oc.u ? 'selected' : ''}>${p.n} (${p.t})</option>`;
+        
+        let opts = `<option value="SIN_ASIGNAR">SIN ASIGNAR</option>`;
+        opts += personalList.map(p => {
+            // REGLA: Validar si este personal está disponible para esta OC específica
+            let ok = true;
+            for(let i=oc.si; i<oc.fi; i++) {
+                if(!esBloqueDisponible(i, p.n, p.t)) { ok = false; break; }
+            }
+            
+            // CÁLCULO DE CARGA ACTUAL:
+            let cargaBloques = asignaciones.filter(a => a.u === p.n).reduce((sum, a) => {
+                let d = a.fi - a.si;
+                return sum + (d < 0 ? d + 48 : d);
+            }, 0);
+            const cargaTexto = `[${calcularEsfuerzoTexto(cargaBloques)}]`;
+
+            return `<option value="${p.n}" class="${ok ? 'opt-verde' : 'opt-rojo'}" ${p.n === oc.u ? 'selected' : ''}>
+                        ${p.n} ${cargaTexto} (${p.t})
+                    </option>`;
         }).join('');
+        
+        s.innerHTML = opts;
         document.getElementById('modal').style.display='block';
         document.getElementById('overlay').style.display='block';
     }
-
     window.cerrar = () => { document.getElementById('modal').style.display='none'; document.getElementById('overlay').style.display='none'; }
-    window.aplicar = () => { currentOC.u = document.getElementById('sU').value; window.cerrar(); window.dibujar(); }
+    window.aplicar = () => { sel.u = document.getElementById('sU').value; cerrar(); window.dibujar(); }
 </script>
-
 </body>
 </html>
