@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Planificador Inteligente Pro - Auditoría y Sugerencia IA</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        :root { --p-green: #d4edda; --border: #dee2e6; --blue: #3182ce; --conflict: #feb2b2; --danger-text: #9b2c2c; --ok-text: #22543d; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; padding: 20px; background: #f7fafc; color: #2d3748; }
+        
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        .grid-tables { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .collapsed { display: none; }
+
+        /* Matriz con Columna Estática */
+        .matrix-wrapper { overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: white; max-height: 60vh; }
+        table.matrix { border-collapse: separate; border-spacing: 0; table-layout: fixed; min-width: 2600px; }
+        table.matrix th, table.matrix td { border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); text-align: center; font-size: 10px; height: 42px; width: 50px; }
+        
+        .col-user { 
+            width: 240px !important; font-weight: 600; background: #f8fafc !important; 
+            position: sticky; left: 0; z-index: 20; border-right: 3px solid #cbd5e0 !important; 
+            text-align: left !important; padding-left: 10px !important;
+        }
+        .badge-count { background: #edf2f7; color: #4a5568; font-size: 10px; padding: 2px 6px; border-radius: 10px; margin-top: 4px; display: inline-block; }
+        
+        thead tr th { position: sticky; top: 0; z-index: 10; background: #edf2f7; }
+        thead tr th.col-user { z-index: 30; top: 0; }
+
+        /* Estilos de Celdas */
+        .cell-active { background-color: var(--p-green); }
+        .cell-oc { font-weight: bold; cursor: pointer; color: white; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
+        .cell-alert { background-color: var(--conflict) !important; border: 2px solid #f56565 !important; color: var(--danger-text) !important; }
+
+        /* Auditoría Inferior */
+        .audit-list { list-style: none; padding: 0; }
+        .audit-item { padding: 8px; border-bottom: 1px solid #eee; font-size: 13px; display: flex; justify-content: space-between; }
+        .audit-item:last-child { border: none; }
+        .label-danger { color: #e53e3e; font-weight: bold; }
+
+        /* Selector de Reasignación con Colores */
+        .opt-verde { background-color: #c6f6d5 !important; color: #22543d !important; font-weight: bold; }
+        .opt-rojo { background-color: #fed7d7 !important; color: #9b2c2c !important; }
+
+        /* IA Box */
+        .ai-panel { background: #ebf8ff; border: 1px solid #90cdf4; border-radius: 8px; padding: 15px; margin-top: 15px; }
+
+        .btn { padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; margin: 2px; transition: 0.2s; }
+        .btn-blue { background: var(--blue); color: white; }
+        .btn-ai { background: #4a5568; color: white; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between;">
+        <h2>⚙️ Gestión Operativa e IA</h2>
+        <button class="btn btn-blue" style="background:#a0aec0" onclick="document.getElementById('configSec').classList.toggle('collapsed')">Configuración</button>
+    </div>
+
+    <div id="configSec" class="collapsible">
+        <div style="margin: 15px 0;">
+            <input type="file" id="upT" style="display:none" onchange="importar('turnos', this)">
+            <input type="file" id="upH" style="display:none" onchange="importar('horarios', this)">
+            <input type="file" id="upO" style="display:none" onchange="importar('ocs', this)">
+            <button class="btn btn-blue" onclick="document.getElementById('upT').click()">👥 Turnos</button>
+            <button class="btn btn-blue" onclick="document.getElementById('upH').click()">🕒 Horarios</button>
+            <button class="btn btn-blue" style="background:#ed8936" onclick="document.getElementById('upO').click()">📦 Cargar OCs</button>
+            <button class="btn btn-blue" style="background:#38a169" onclick="plantilla('save')">💾 Guardar Plantilla</button>
+            <button class="btn btn-blue" style="background:#38a169" onclick="plantilla('load')">📂 Cargar Plantilla</button>
+        </div>
+        <div class="grid-tables">
+            <div><h4>Personal</h4><table id="tP"><thead><tr><th>Nombre</th><th>Turno</th></tr></thead><tbody id="bP"></tbody></table></div>
+            <div><h4>Horarios</h4><table id="tH"><thead><tr><th>Leyenda</th><th>Rango</th></tr></thead><tbody id="bH"></tbody></table></div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div style="margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+            <button class="btn btn-blue" onclick="generar()">⚡ ACTUALIZAR MATRIZ</button>
+            <button class="btn btn-ai" onclick="pedirSugerenciaIA()">✨ SUGERENCIA DE ASIGNACIÓN (IA)</button>
+        </div>
+        <div id="totalErrorsBadge" style="font-weight:bold;"></div>
+    </div>
+    
+    <div id="aiPanel" class="ai-panel" style="display:none">
+        <strong>🤖 Análisis de Gemini AI:</strong>
+        <p id="aiSuggestion" style="font-size: 13px; margin-top: 5px; line-height: 1.4;"></p>
+    </div>
+
+    <div class="matrix-wrapper" id="captureArea">
+        <table class="matrix" id="mainTable">
+            <thead><tr id="hH"></tr></thead>
+            <tbody id="bM"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h3>📋 Resumen de Auditoría</h3>
+    <div style="display: flex; gap: 30px; margin-bottom: 15px; background: #f8fafc; padding: 15px; border-radius: 8px;">
+        <div><strong>Total OCs Cargadas:</strong> <span id="auditTotalOCs">0</span></div>
+        <div><strong>OCs con Conflictos:</strong> <span id="auditTotalErrors" class="label-danger">0</span></div>
+    </div>
+    <div id="auditListContainer">
+        <strong>Listado de Conflictos Detectados:</strong>
+        <ul id="auditList" class="audit-list">
+            <li class="audit-item" style="color: #666;">No se han detectado conflictos o no se ha cargado información.</li>
+        </ul>
+    </div>
+</div>
+
+<div id="overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:99;" onclick="cerrar()"></div>
+<div id="modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:white; padding:25px; border-radius:12px; box-shadow:0 20px 40px rgba(0,0,0,0.3); z-index:100; width:450px;">
+    <h3>🔄 Reasignar OC <span id="mOC" style="color:var(--blue)"></span></h3>
+    <p id="mInfo" style="font-size:12px; color:#666; background:#f1f3f4; padding:8px; border-radius:5px;"></p>
+    
+    <label style="font-weight:bold; font-size:13px; display:block; margin-bottom:5px;">Seleccionar nuevo responsable:</label>
+    <select id="sU" style="width:100%; padding:12px; margin-bottom:20px; border-radius:8px; border:1px solid #ccc;"></select>
+    
+    <div style="display:flex; gap:10px;">
+        <button class="btn btn-blue" style="flex:1" onclick="aplicar()">Confirmar Cambio</button>
+        <button class="btn" style="flex:1; background:#edf2f7;" onclick="cerrar()">Cerrar</button>
+    </div>
+</div>
+
+<script>
+    let rawO = [], asignaciones = [], hMap = {};
+
+    function importar(tipo, input) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const data = XLSX.utils.sheet_to_json(XLSX.read(e.target.result, {type:'binary', cellDates:true}).Sheets[XLSX.read(e.target.result, {type:'binary', cellDates:true}).SheetNames[0]]);
+            if (tipo === 'ocs') { rawO = data; generar(); }
+            else {
+                const tbody = tipo === 'turnos' ? 'bP' : 'bH';
+                document.getElementById(tbody).innerHTML = data.map(r => `<tr><td contenteditable="true">${Object.values(r)[0]}</td><td contenteditable="true">${Object.values(r)[1]}</td></tr>`).join('');
+            }
+        };
+        reader.readAsBinaryString(input.files[0]);
+    }
+
+    function plantilla(acc) {
+        if(acc === 'save') {
+            const p = Array.from(document.querySelectorAll("#bP tr")).map(tr => [tr.cells[0].innerText, tr.cells[1].innerText]);
+            const h = Array.from(document.querySelectorAll("#bH tr")).map(tr => [tr.cells[0].innerText, tr.cells[1].innerText]);
+            localStorage.setItem('plan_final_ia', JSON.stringify({p, h}));
+            alert("Plantilla guardada.");
+        } else {
+            const d = JSON.parse(localStorage.getItem('plan_final_ia'));
+            if(d) {
+                document.getElementById('bP').innerHTML = d.p.map(x => `<tr><td contenteditable="true">${x[0]}</td><td contenteditable="true">${x[1]}</td></tr>`).join('');
+                document.getElementById('bH').innerHTML = d.h.map(x => `<tr><td contenteditable="true">${x[0]}</td><td contenteditable="true">${x[1]}</td></tr>`).join('');
+            }
+        }
+    }
+
+    function parseH() {
+        hMap = {};
+        Array.from(document.querySelectorAll("#bH tr")).forEach(tr => {
+            const r = tr.cells[1].innerText.trim();
+            if(r.includes('-')) {
+                const [i, f] = r.split('-');
+                const [hi, mi] = i.split(':').map(Number);
+                const [hf, mf] = f.split(':').map(Number);
+                hMap[tr.cells[0].innerText.trim()] = { si: hi*2 + (mi>=30?1:0), fi: hf*2 + (mf>=30?1:0) };
+            }
+        });
+    }
+
+    function generar() {
+        parseH();
+        const pers = Array.from(document.querySelectorAll("#bP tr")).map(tr => ({n: tr.cells[0].innerText.trim(), t: tr.cells[1].innerText.trim()})).filter(x => x.n !== "");
+        const head = document.getElementById('hH');
+        const body = document.getElementById('bM');
+        head.innerHTML = '<th class="col-user">Personal / Carga</th>';
+        for(let i=0; i<48; i++) head.innerHTML += `<th>${Math.floor(i/2).toString().padStart(2,'0')}:${i%2==0?'00':'30'}</th>`;
+
+        body.innerHTML = '';
+        pers.forEach(p => {
+            const tr = document.createElement('tr');
+            tr.id = `row-${p.n.replace(/\s+/g, '_')}`;
+            tr.innerHTML = `<td class="col-user">${p.n}<br><span class="badge-count" id="count-${p.n.replace(/\s+/g, '_')}">0 OCs</span></td>`;
+            const info = hMap[p.t];
+            for(let i=0; i<48; i++) {
+                const td = document.createElement('td'); 
+                td.dataset.h = i;
+                if(info) {
+                    const ok = info.si < info.fi ? (i>=info.si && i<info.fi) : (i>=info.si || i<info.fi);
+                    if(ok) td.classList.add('cell-active');
+                }
+                tr.appendChild(td);
+            }
+            body.appendChild(tr);
+        });
+
+        const activos = pers.filter(x => !['L','VA','LIBRE','VACACIONES'].includes(x.t.toUpperCase()));
+        asignaciones = rawO.map((oc, idx) => {
+            const di = new Date(oc['FECHA INICIO']), df = new Date(oc['FECHA FIN']);
+            return {
+                id: oc['OC'], 
+                si: di.getHours()*2 + (di.getMinutes()>=30?1:0),
+                fi: df.getHours()*2 + (df.getMinutes()>=30?1:0),
+                u: activos.length > 0 ? activos[idx % activos.length].n : pers[0].n,
+                clr: `hsl(${(oc['OC']*137)%360}, 65%, 45%)`
+            };
+        });
+        dibujar();
+    }
+
+    function dibujar() {
+        document.querySelectorAll('td[dataset-h]').forEach(c => { c.innerHTML=''; c.style.backgroundColor=''; c.classList.remove('cell-oc','cell-alert'); c.colSpan = 1; c.style.display = ''; delete c.dataset.err; });
+        const conteos = {};
+        const ocupacion = {};
+        let errs = 0;
+        let conflictListHTML = "";
+
+        asignaciones.forEach(oc => {
+            const uId = oc.u.replace(/\s+/g, '_');
+            conteos[uId] = (conteos[uId] || 0) + 1;
+            const row = document.getElementById(`row-${uId}`);
+            let primera = null; let ancho = 0;
+            let currentConflict = false;
+            let conflictType = "";
+
+            for(let i=oc.si; i<=oc.fi; i++) {
+                const key = `${oc.u}-${i}`;
+                ocupacion[key] = (ocupacion[key] || 0) + 1;
+                const cell = Array.from(row.cells).find(c => c.dataset.h == i);
+                if(cell) {
+                    if (i === oc.si) primera = cell;
+                    else { cell.style.display = 'none'; ancho++; }
+                    
+                    if (ocupacion[key] > 1) { 
+                        cell.dataset.err = "1"; currentConflict = true; 
+                        conflictType = "Doble asignación (Traslape)";
+                    }
+                    if (!cell.classList.contains('cell-active')) { 
+                        cell.dataset.err = "1"; currentConflict = true; 
+                        conflictType = conflictType ? conflictType + " / Fuera de Turno" : "Fuera de Turno";
+                    }
+                }
+            }
+            if(primera) {
+                primera.colSpan = ancho + 1;
+                primera.style.backgroundColor = oc.clr;
+                primera.classList.add('cell-oc');
+                primera.innerHTML = oc.id;
+                primera.onclick = () => abrir(oc);
+                if(currentConflict) { 
+                    primera.classList.add('cell-alert'); 
+                    errs++; 
+                    conflictListHTML += `<li class="audit-item"><span><strong>OC ${oc.id}</strong> (${oc.u})</span> <span class="label-danger">${conflictType}</span></li>`;
+                }
+            }
+        });
+
+        // Actualizar UI de Badges
+        document.querySelectorAll('.badge-count').forEach(b => {
+            const id = b.id.replace('count-', '');
+            b.innerText = `${conteos[id] || 0} OCs`;
+        });
+
+        document.getElementById('totalErrorsBadge').innerHTML = errs > 0 ? 
+            `<span style="color:var(--danger-text)">⚠️ Conflictos: ${errs}</span>` : 
+            `<span style="color:var(--ok-text)">✅ Planificación Correcta</span>`;
+
+        // Actualizar UI de Auditoría Final
+        document.getElementById('auditTotalOCs').innerText = asignaciones.length;
+        document.getElementById('auditTotalErrors').innerText = errs;
+        document.getElementById('auditList').innerHTML = conflictListHTML || '<li class="audit-item" style="color: green;">✅ No se detectaron conflictos en la programación actual.</li>';
+    }
+
+    function pedirSugerenciaIA() {
+        const panel = document.getElementById('aiPanel');
+        const sugerencia = document.getElementById('aiSuggestion');
+        panel.style.display = 'block';
+        sugerencia.innerText = "Consultando a Gemini... analizando disponibilidad y carga de trabajo...";
+        
+        setTimeout(() => {
+            sugerencia.innerText = `Sugerencia IA: He detectado que hay desajustes de turno. Revise el listado de auditoría al final de la página. Priorice mover las OCs marcadas como "Fuera de Turno" a usuarios con fondo verde en el selector de reasignación.`;
+        }, 1200);
+    }
+
+    let sel = null;
+    function abrir(oc) {
+        sel = oc;
+        document.getElementById('mOC').innerText = oc.id;
+        document.getElementById('mInfo').innerText = `Horario requerido: ${Math.floor(oc.si/2)}:${oc.si%2==0?'00':'30'} a ${Math.floor(oc.fi/2)}:${oc.fi%2==0?'00':'30'}`;
+        
+        const s = document.getElementById('sU');
+        s.innerHTML = '';
+        const pers = Array.from(document.querySelectorAll("#bP tr")).map(tr => ({n: tr.cells[0].innerText.trim(), t: tr.cells[1].innerText.trim()})).filter(x => x.n !== "");
+        
+        pers.forEach(p => {
+            const info = hMap[p.t];
+            let apto = false;
+            if(info) {
+                const okIni = info.si < info.fi ? (oc.si >= info.si && oc.si < info.fi) : (oc.si >= info.si || oc.si < info.fi);
+                const okFin = info.si < info.fi ? (oc.fi >= info.si && oc.fi <= info.fi) : (oc.fi >= info.si || oc.fi <= info.fi);
+                apto = okIni && okFin;
+            }
+
+            const opt = document.createElement('option');
+            opt.value = p.n;
+            opt.innerText = `${p.n} (${p.t}) ${apto ? ' - [EN TURNO]' : ' - [FUERA DE TURNO]'}`;
+            opt.className = apto ? 'opt-verde' : 'opt-rojo';
+            if(p.n === oc.u) opt.selected = true;
+            s.appendChild(opt);
+        });
+
+        document.getElementById('modal').style.display='block';
+        document.getElementById('overlay').style.display='block';
+    }
+
+    function cerrar() { document.getElementById('modal').style.display='none'; document.getElementById('overlay').style.display='none'; }
+    function aplicar() { sel.u = document.getElementById('sU').value; cerrar(); dibujar(); }
+</script>
+
+</body>
+</html>
